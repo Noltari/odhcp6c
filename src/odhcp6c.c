@@ -180,7 +180,9 @@ int main(_o_unused int argc, char* const argv[])
 	int res = -1;
 	unsigned int ra_options = RA_RDNSS_DEFAULT_LIFETIME;
 	unsigned int ra_holdoff_interval = RA_MIN_ADV_INTERVAL;
+	ra_ifid_mode_t ra_ifid_mode = RA_IFID_LLA;
 	bool terminate = false;
+
 	config_dhcp = config_dhcp_get();
 	config_dhcp_reset();
 
@@ -289,8 +291,16 @@ int main(_o_unused int argc, char* const argv[])
 			break;
 
 		case 'i':
-			if (inet_pton(AF_INET6, optarg, &ifid) != 1)
-				help = true;
+			if (!strncmp(optarg, DHCPV6_IFACEID_EUI64, sizeof(DHCPV6_IFACEID_EUI64))) {
+				ra_ifid_mode = RA_IFID_EUI64;
+			} else if (!strncmp(optarg, DHCPV6_IFACEID_RANDOM, sizeof(DHCPV6_IFACEID_RANDOM))) {
+				ra_ifid_mode = RA_IFID_RANDOM;
+			} else if (inet_pton(AF_INET6, optarg, &ifid) == 1) {
+				ra_ifid_mode = RA_IFID_FIXED;
+			} else {
+				/* Do not error on bad values and fallback to default */
+				syslog(LOG_ERR, "Invalid interface-ID: %s", optarg);
+			}
 			break;
 
 		case 'r':
@@ -459,8 +469,8 @@ int main(_o_unused int argc, char* const argv[])
 	}
 
 	if ((urandom_fd = open("/dev/urandom", O_CLOEXEC | O_RDONLY)) < 0 ||
-			ra_init(ifname, &ifid, ra_options, ra_holdoff_interval) ||
-			script_init(script, ifname)) {
+	    ra_init(ifname, &ifid, ra_ifid_mode, ra_options, ra_holdoff_interval) ||
+	    script_init(script, ifname)) {
 		syslog(LOG_ERR, "failed to initialize: %s", strerror(errno));
 		return 4;
 	}
