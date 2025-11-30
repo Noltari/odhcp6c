@@ -68,6 +68,9 @@
 #define DHCPV6_DEC_INIT_RT 1
 #define DHCPV6_DEC_MAX_RC 4
 
+#define DHCPV6_IFACEID_EUI64 "eui64"
+#define DHCPV6_IFACEID_RANDOM "random"
+
 #define RA_MIN_ADV_INTERVAL 3   /* RFC 4861 paragraph 6.2.1 */
 
 /* RFC8910 §2 */

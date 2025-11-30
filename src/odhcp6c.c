@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <linux/if_addr.h>
+#include <net/ethernet.h>
 #include <net/if.h>
 #include <netinet/icmp6.h>
 #include <poll.h>
@@ -31,6 +32,7 @@
 #include <string.h>
 #include <strings.h>
 #include <syslog.h>
+#include <sys/ioctl.h>
 #include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
@@ -181,6 +183,8 @@ int main(_o_unused int argc, char* const argv[])
 	unsigned int ra_options = RA_RDNSS_DEFAULT_LIFETIME;
 	unsigned int ra_holdoff_interval = RA_MIN_ADV_INTERVAL;
 	bool terminate = false;
+	bool eui64_ifid = false;
+
 	config_dhcp = config_dhcp_get();
 	config_dhcp_reset();
 
@@ -289,8 +293,14 @@ int main(_o_unused int argc, char* const argv[])
 			break;
 
 		case 'i':
-			if (inet_pton(AF_INET6, optarg, &ifid) != 1)
-				help = true;
+			if (!strncmp(optarg, DHCPV6_IFACEID_EUI64, sizeof(DHCPV6_IFACEID_EUI64))) {
+				eui64_ifid = true;
+			} else if (!strncmp(optarg, DHCPV6_IFACEID_RANDOM, sizeof(DHCPV6_IFACEID_RANDOM))) {
+				ifid.s6_addr32[2] = (uint32_t) mrand48();
+				ifid.s6_addr32[3] = (uint32_t) mrand48();
+			} else if (inet_pton(AF_INET6, optarg, &ifid) != 1) {
+				syslog(LOG_ERR, "Invalid interface-ID: %s", optarg);
+			}
 			break;
 
 		case 'r':
@@ -430,6 +440,32 @@ int main(_o_unused int argc, char* const argv[])
 
 	if (help || !ifname)
 		return usage();
+
+	if (eui64_ifid) {
+		int sock = -1;
+
+		sock = socket(AF_INET6, SOCK_DGRAM, 0);
+		if (sock >= 0) {
+			struct ifreq ifr;
+
+			memset(&ifr, 0, sizeof(ifr));
+			strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name) - 1);
+
+			if (ioctl(sock, SIOCGIFHWADDR, &ifr) >= 0) {
+				ifid.s6_addr[8] = ifr.ifr_hwaddr.sa_data[0] ^ 0x2;
+				ifid.s6_addr[9] = ifr.ifr_hwaddr.sa_data[1];
+				ifid.s6_addr[10] = ifr.ifr_hwaddr.sa_data[2];
+				ifid.s6_addr[11] = 0xff;
+				ifid.s6_addr[12] = 0xfe;
+				ifid.s6_addr[13] = ifr.ifr_hwaddr.sa_data[3];
+				ifid.s6_addr[14] = ifr.ifr_hwaddr.sa_data[4];
+				ifid.s6_addr[15] = ifr.ifr_hwaddr.sa_data[5];
+			}
+		}
+
+		if (sock >= 0)
+			close(sock);
+	}
 
 	signal(SIGIO, sighandler);
 	signal(SIGHUP, sighandler);
