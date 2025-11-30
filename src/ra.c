@@ -59,6 +59,7 @@ static volatile int rs_attempt = 0;
 static struct in6_addr lladdr = IN6ADDR_ANY_INIT;
 static unsigned int ra_options = 0;
 static unsigned int ra_holdoff_interval = 0;
+static ra_ifid_mode_t ra_ifid_mode = RA_IFID_LLA;
 static int ra_hoplimit = 0;
 static int ra_mtu = 0;
 static int ra_reachable = 0;
@@ -75,12 +76,14 @@ struct {
 static void ra_send_rs(_o_unused int signal);
 
 int ra_init(const char *ifname, const struct in6_addr *ifid,
-		unsigned int options, unsigned int holdoff_interval)
+	    ra_ifid_mode_t ifid_mode, unsigned int options,
+	    unsigned int holdoff_interval)
 {
 	struct ifreq ifr;
 
 	ra_options = options;
 	ra_holdoff_interval = holdoff_interval;
+	ra_ifid_mode = ifid_mode;
 
 	const pid_t ourpid = getpid();
 	sock = socket(AF_INET6, SOCK_RAW | SOCK_CLOEXEC, IPPROTO_ICMPV6);
@@ -99,6 +102,7 @@ int ra_init(const char *ifname, const struct in6_addr *ifid,
 	if (ioctl(sock, SIOCGIFINDEX, &ifr) < 0)
 		goto failure;
 
+	strncpy(if_name, ifname, sizeof(if_name) - 1);
 	if_index = ifr.ifr_ifindex;
 	lladdr = *ifid;
 
@@ -373,6 +377,43 @@ bool ra_process(void)
 				lladdr = addr.sin6_addr;
 
 			close(sock);
+		}
+
+		switch (ra_ifid_mode) {
+		case RA_IFID_EUI64:
+			sock = socket(AF_INET6, SOCK_DGRAM, 0);
+			if (sock >= 0) {
+				struct ifreq ifr;
+
+				memset(&ifr, 0, sizeof(ifr));
+				strncpy(ifr.ifr_name, if_name, sizeof(ifr.ifr_name) - 1);
+
+				if (ioctl(sock, SIOCGIFHWADDR, &ifr) == 0) {
+					lladdr.s6_addr[8] = ifr.ifr_hwaddr.sa_data[0] ^ 0x2;
+					lladdr.s6_addr[9] = ifr.ifr_hwaddr.sa_data[1];
+					lladdr.s6_addr[10] = ifr.ifr_hwaddr.sa_data[2];
+					lladdr.s6_addr[11] = 0xff;
+					lladdr.s6_addr[12] = 0xfe;
+					lladdr.s6_addr[13] = ifr.ifr_hwaddr.sa_data[3];
+					lladdr.s6_addr[14] = ifr.ifr_hwaddr.sa_data[4];
+					lladdr.s6_addr[15] = ifr.ifr_hwaddr.sa_data[5];
+					syslog(LOG_WARNING, "SIOCGIFHWADDR: sa_family=%x", ifr.ifr_hwaddr.sa_family);
+				} else {
+					syslog(LOG_ERR, "error getting MAC from %s", if_name);
+				}
+
+				close(sock);
+			}
+			break;
+		case RA_IFID_RANDOM:
+			odhcp6c_random(&lladdr.s6_addr[8], 8);
+			break;
+		case RA_IFID_FIXED:
+			// TODO: check ::0
+			break;
+		case RA_IFID_LLA:
+			/* nothing to do */
+			break;
 		}
 	}
 
