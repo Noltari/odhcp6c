@@ -272,12 +272,14 @@ static uint32_t ntohl_unaligned(const uint8_t *data)
 
 static void dhcpv6_next_state(void)
 {
+	syslog(LOG_WARNING, "dhcpv6_next_state: cur_state=%s new_state=%s", dhcpv6_state_to_str(dhcpv6_state), dhcpv6_state_to_str(dhcpv6_state+1));
 	dhcpv6_state++;
 	dhcpv6_reset_state_timeout();
 }
 
 static void dhcpv6_prev_state(void)
 {
+	syslog(LOG_WARNING, "dhcpv6_prev_state: cur_state=%s new_state=%s", dhcpv6_state_to_str(dhcpv6_state), dhcpv6_state_to_str(dhcpv6_state-1));
 	dhcpv6_state--;
 	dhcpv6_reset_state_timeout();
 }
@@ -511,6 +513,8 @@ enum dhcpv6_state dhcpv6_get_state(void)
 
 void dhcpv6_set_state(enum dhcpv6_state state)
 {
+	syslog(LOG_WARNING, "dhcpv6_set_state: cur_state=%s new_state=%s", dhcpv6_state_to_str(dhcpv6_state), dhcpv6_state_to_str(state));
+
 	dhcpv6_state = state;
 	dhcpv6_reset_state_timeout();
 }
@@ -522,6 +526,8 @@ int dhcpv6_get_state_timeout(void)
 
 void dhcpv6_set_state_timeout(int timeout)
 {
+	syslog(LOG_WARNING, "dhcpv6_set_state_timeout: timeout=%d", timeout);
+
 	if (timeout > 0 && (dhcpv6_state_timeout == 0 || timeout < dhcpv6_state_timeout)) {
 		dhcpv6_state_timeout = timeout;
 	}
@@ -529,6 +535,8 @@ void dhcpv6_set_state_timeout(int timeout)
 
 void dhcpv6_reset_state_timeout(void)
 {
+	syslog(LOG_WARNING, "dhcpv6_reset_state_timeout");
+
 	dhcpv6_state_timeout = 0;
 }
 
@@ -539,6 +547,8 @@ struct dhcpv6_stats dhcpv6_get_stats(void)
 
 void dhcpv6_reset_stats(void)
 {
+	syslog(LOG_WARNING, "dhcpv6_reset_stats");
+
 	memset(&dhcpv6_stats, 0, sizeof(dhcpv6_stats));
 }
 
@@ -689,6 +699,8 @@ int dhcpv6_get_ia_mode(void)
 		mode = DHCPV6_STATELESS;
 	else if (na_mode == IA_MODE_FORCE || pd_mode == IA_MODE_FORCE)
 		mode = DHCPV6_STATEFUL;
+
+	syslog(LOG_WARNING, "dhcpv6_get_ia_mode: na_mode=%u pd_mode=%u mode=%d", na_mode, pd_mode, mode);
 
 	return mode;
 }
@@ -1141,6 +1153,8 @@ static int dhcpv6_handle_reconfigure(enum dhcpv6_msg orig, const int rc,
 	uint8_t *odata;
 	enum dhcpv6_msg msg = DHCPV6_MSG_UNKNOWN;
 
+	syslog(LOG_WARNING, "dhcpv6_handle_reconfigure");
+
 	dhcpv6_for_each_option(opt, end, otype, olen, odata) {
 		if (otype == DHCPV6_OPT_RECONF_MESSAGE && olen == 1) {
 			switch (odata[0]) {
@@ -1181,6 +1195,8 @@ static int dhcpv6_handle_advert(enum dhcpv6_msg orig, const int rc,
 					DHCPV6_INF_MAX_RT, NULL, NULL, 0, 0};
 	bool have_na = false;
 	int have_pd = 0;
+
+	syslog(LOG_WARNING, "dhcpv6_handle_advert");
 
 	dhcpv6_for_each_option(opt, end, otype, olen, odata) {
 		if (orig == DHCPV6_MSG_SOLICIT &&
@@ -1302,12 +1318,16 @@ static int dhcpv6_handle_advert(enum dhcpv6_msg orig, const int rc,
 
 static int dhcpv6_commit_advert(void)
 {
+	syslog(LOG_WARNING, "dhcpv6_commit_advert");
+
 	return dhcpv6_promote_server_cand();
 }
 
 static int dhcpv6_handle_rebind_reply(enum dhcpv6_msg orig, const int rc,
 		const void *opt, const void *end, const struct sockaddr_in6 *from)
 {
+	syslog(LOG_WARNING, "dhcpv6_handle_rebind_reply");
+
 	dhcpv6_handle_advert(orig, rc, opt, end, from);
 	if (dhcpv6_commit_advert() < 0)
 		return -1;
@@ -1325,6 +1345,8 @@ static int dhcpv6_handle_reply(enum dhcpv6_msg orig, _o_unused const int rc,
 	unsigned int state_IAs;
 	unsigned int updated_IAs = 0;
 	bool handled_status_codes[_DHCPV6_Status_Max] = { false, };
+
+	syslog(LOG_WARNING, "dhcpv6_handle_reply");
 
 	odhcp6c_expire(true);
 
@@ -2013,6 +2035,8 @@ static void dhcpv6_add_server_cand(const struct dhcpv6_server_cand *cand)
 	size_t cand_len, i;
 	struct dhcpv6_server_cand *srv_candidates = odhcp6c_get_state(STATE_SERVER_CAND, &cand_len);
 
+	syslog(LOG_WARNING, "dhcpv6_add_server_cand");
+
 	// Remove identical DUID server candidate
 	for (i = 0; i < cand_len / sizeof(*srv_candidates); ++i) {
 		if (cand->duid_len == srv_candidates[i].duid_len &&
@@ -2041,6 +2065,8 @@ static void dhcpv6_clear_all_server_cand(void)
 	size_t cand_len, i;
 	struct dhcpv6_server_cand *srv_candidates = odhcp6c_get_state(STATE_SERVER_CAND, &cand_len);
 
+	syslog(LOG_WARNING, "dhcpv6_clear_all_server_cand");
+
 	// Server candidates need deep delete for IA_NA/IA_PD
 	for (i = 0; i < cand_len / sizeof(*srv_candidates); ++i) {
 		free(srv_candidates[i].ia_na);
@@ -2061,14 +2087,22 @@ int dhcpv6_promote_server_cand(void)
 	odhcp6c_clear_state(STATE_IA_NA);
 	odhcp6c_clear_state(STATE_IA_PD);
 
+	syslog(LOG_WARNING, "dhcpv6_promote_server_cand: cand_len=%zu", cand_len);
+
 	if (!cand_len)
 		return -1;
+
+	syslog(LOG_WARNING, "dhcpv6_promote_server_cand: ia_na_len=%zu ia_pd_len=%zu", cand->ia_na_len, cand->ia_pd_len);
+	syslog(LOG_WARNING, "dhcpv6_promote_server_cand: has_noaddravail=%u na_mode=%u", cand->has_noaddravail, na_mode);
 
 	if (!cand->ia_pd_len && cand->has_noaddravail && na_mode == IA_MODE_TRY) {
 		na_mode = IA_MODE_NONE;
 
 		dhcpv6_retx[DHCPV6_MSG_SOLICIT].max_timeo = cand->sol_max_rt;
 		dhcpv6_retx[DHCPV6_MSG_INFO_REQ].max_timeo = cand->inf_max_rt;
+
+		syslog(LOG_WARNING, "dhcpv6_promote_server_cand: try->none");
+
 		return -1;
 	}
 
@@ -2098,6 +2132,8 @@ int dhcpv6_promote_server_cand(void)
 
 	odhcp6c_remove_state(STATE_SERVER_CAND, 0, sizeof(*cand));
 
+	syslog(LOG_WARNING, "dhcpv6_promote_server_cand: ret=%d", ret);
+
 	return ret;
 }
 
@@ -2105,6 +2141,8 @@ int dhcpv6_send_request(enum dhcpv6_msg req_msg_type)
 {
 	struct dhcpv6_retx *retx = &dhcpv6_retx[req_msg_type];
 	uint64_t current_milli_time = 0;
+
+	syslog(LOG_WARNING, "dhcpv6_send_request: req_msg_type=%u", req_msg_type);
 
 	if (!retx->is_retransmit) {
 		if (retx->max_delay) {
@@ -2203,6 +2241,8 @@ int dhcpv6_receive_response(enum dhcpv6_msg req_msg_type)
 	ssize_t len = -1;
 	struct dhcpv6_retx *retx = &dhcpv6_retx[req_msg_type];
 
+	syslog(LOG_WARNING, "dhcpv6_receive_response: req_msg_type=%u", req_msg_type);
+
 	uint8_t buf[1536];
 	union {
 		struct cmsghdr hdr;
@@ -2272,6 +2312,8 @@ int dhcpv6_state_processing(enum dhcpv6_msg req_msg_type)
 	int ret = retx->reply_ret;
 	retx->round_start = odhcp6c_get_milli_time();
 	uint64_t elapsed = retx->round_start - retx->start;
+
+	syslog(LOG_WARNING, "dhcpv6_receive_response: req_msg_type=%u", req_msg_type);
 
 	if (retx->round_start >= retx->round_end || ret >=0 ) {
 		if (retx->handler_finish)

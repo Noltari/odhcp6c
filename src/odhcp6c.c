@@ -501,11 +501,15 @@ int main(_o_unused int argc, char* const argv[])
 
 	notify_state_change("started", 0, false);
 
+	res = -1;
 	while (!terminate) { // Main logic
 		int poll_res;
 		bool signalled = odhcp6c_signal_process();
+		enum dhcpv6_state state = dhcpv6_get_state();
 
-		switch (dhcpv6_get_state()) {
+		syslog(LOG_WARNING, "odhcp6c: state=%s signalled=%u", dhcpv6_state_to_str(state), signalled);
+
+		switch (state) {
 		case DHCPV6_INIT:
 			odhcp6c_clear_state(STATE_SERVER_ID);
 			odhcp6c_clear_state(STATE_SERVER_ADDR);
@@ -894,12 +898,16 @@ bool odhcp6c_signal_process(void)
 
 void odhcp6c_clear_state(enum odhcp6c_state state)
 {
+	syslog(LOG_WARNING, "odhcp6c_clear_state: state=%u", state);
+
 	state_len[state] = 0;
 }
 
 int odhcp6c_add_state(enum odhcp6c_state state, const void *data, size_t len)
 {
 	uint8_t *n = odhcp6c_resize_state(state, len);
+
+	syslog(LOG_WARNING, "odhcp6c_add_state: state=%u", state);
 
 	if (!n)
 		return -1;
@@ -912,6 +920,9 @@ int odhcp6c_add_state(enum odhcp6c_state state, const void *data, size_t len)
 int odhcp6c_insert_state(enum odhcp6c_state state, size_t offset, const void *data, size_t len)
 {
 	ssize_t len_after = state_len[state] - offset;
+
+	syslog(LOG_WARNING, "odhcp6c_insert_state: state=%u offset=%zu", state, offset);
+
 	if (len_after < 0)
 		return -1;
 
@@ -932,6 +943,8 @@ size_t odhcp6c_remove_state(enum odhcp6c_state state, size_t offset, size_t len)
 	uint8_t *data = state_data[state];
 	ssize_t len_after = state_len[state] - (offset + len);
 
+	syslog(LOG_WARNING, "odhcp6c_remove_state: state=%u offset=%zu len=%zu", state, offset, len);
+
 	if (len_after < 0)
 		return state_len[state];
 
@@ -945,6 +958,8 @@ void* odhcp6c_move_state(enum odhcp6c_state state, size_t *len)
 	*len = state_len[state];
 	void *data = state_data[state];
 
+	syslog(LOG_WARNING, "odhcp6c_move_state: state=%u len=%zu", state, *len);
+
 	state_len[state] = 0;
 	state_data[state] = NULL;
 
@@ -954,6 +969,8 @@ void* odhcp6c_move_state(enum odhcp6c_state state, size_t *len)
 void* odhcp6c_get_state(enum odhcp6c_state state, size_t *len)
 {
 	*len = state_len[state];
+
+	syslog(LOG_WARNING, "odhcp6c_get_state: state=%u len=%zu", state, *len);
 
 	return state_data[state];
 }
@@ -1128,6 +1145,8 @@ bool odhcp6c_addr_in_scope(const struct in6_addr *addr)
 
 static void sighandler(int signal)
 {
+	syslog(LOG_WARNING, "sighandler: signal=%d", signal);
+
 	if (signal == SIGUSR1)
 		signal_usr1 = true;
 	else if (signal == SIGUSR2)
